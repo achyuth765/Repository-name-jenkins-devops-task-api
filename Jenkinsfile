@@ -82,8 +82,6 @@ pipeline {
                       -f deploy/docker-compose.staging.yml \
                       up -d --force-recreate
 
-                    echo "Waiting for staging application..."
-
                     for i in $(seq 1 15); do
                         if curl -fsS http://localhost:3001/health; then
                             echo ""
@@ -94,7 +92,6 @@ pipeline {
                         sleep 2
                     done
 
-                    echo "Staging health check failed."
                     docker logs task-api-staging
                     exit 1
                 '''
@@ -118,8 +115,6 @@ pipeline {
                       -f deploy/docker-compose.prod.yml \
                       up -d --force-recreate
 
-                    echo "Waiting for production application..."
-
                     for i in $(seq 1 15); do
                         if curl -fsS http://localhost:3000/health; then
                             echo ""
@@ -130,17 +125,95 @@ pipeline {
                         sleep 2
                     done
 
-                    echo "Production health check failed."
                     docker logs task-api-prod
                     exit 1
                 '''
+            }
+        }
+
+        stage('Monitoring') {
+            steps {
+                echo 'Verifying Prometheus monitoring'
+
+                sh '''
+                    mkdir -p reports
+
+                    echo "Checking application metrics..."
+
+                    curl -fsS \
+                      http://localhost:3000/metrics \
+                      > reports/prometheus-metrics.txt
+
+                    grep -q \
+                      "task_api_http_requests_total" \
+                      reports/prometheus-metrics.txt
+
+                    echo "Application metrics endpoint is working!"
+
+                    echo "Checking Prometheus..."
+
+                    curl -fsS http://localhost:9090/-/ready
+
+                    echo ""
+                    echo "Checking Prometheus target health..."
+
+                    curl -fsS \
+                      http://localhost:9090/api/v1/targets \
+                      | node -e "
+                        let data = '';
+
+                        process.stdin.on(
+                          'data',
+                          chunk => data += chunk
+                        );
+
+                        process.stdin.on(
+                          'end',
+                          () => {
+                            const json = JSON.parse(data);
+
+                            const target =
+                              json.data.activeTargets.find(
+                                t =>
+                                  t.labels.job ===
+                                  'task-api-production'
+                              );
+
+                            if (
+                              !target ||
+                              target.health !== 'up'
+                            ) {
+                              console.error(
+                                'Prometheus target is DOWN'
+                              );
+                              process.exit(1);
+                            }
+
+                            console.log(
+                              'Prometheus target is UP'
+                            );
+                          }
+                        );
+                      "
+
+                    echo "Monitoring verification successful!"
+                '''
+            }
+
+            post {
+                always {
+                    archiveArtifacts(
+                        artifacts: 'reports/prometheus-metrics.txt',
+                        allowEmptyArchive: true
+                    )
+                }
             }
         }
     }
 
     post {
         success {
-            echo 'Build, Test, Code Quality, Security, Deploy and Release completed successfully!'
+            echo 'ALL 7 DEVOPS PIPELINE STAGES COMPLETED SUCCESSFULLY!'
         }
 
         failure {
