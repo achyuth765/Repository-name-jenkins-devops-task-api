@@ -68,11 +68,40 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy') {
+            steps {
+                echo 'Deploying application to staging environment'
+
+                sh '''
+                    IMAGE_TAG=${BUILD_NUMBER} \
+                    docker compose \
+                      -f deploy/docker-compose.staging.yml \
+                      up -d --force-recreate
+
+                    echo "Waiting for staging application..."
+
+                    for i in $(seq 1 15); do
+                        if curl -fsS http://localhost:3001/health; then
+                            echo ""
+                            echo "Staging deployment is healthy!"
+                            exit 0
+                        fi
+
+                        sleep 2
+                    done
+
+                    echo "Staging health check failed."
+                    docker logs task-api-staging
+                    exit 1
+                '''
+            }
+        }
     }
 
     post {
         success {
-            echo 'Build, Test, Code Quality and Security completed successfully!'
+            echo 'Build, Test, Code Quality, Security and Deploy completed successfully!'
         }
 
         failure {
