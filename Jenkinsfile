@@ -6,6 +6,7 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Installing dependencies and building Docker image'
+
                 sh '''
                     npm ci
                     docker build -t task-api:${BUILD_NUMBER} .
@@ -16,6 +17,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running automated tests'
+
                 sh '''
                     npm test
                 '''
@@ -72,6 +74,8 @@ pipeline {
                 echo 'Deploying application to staging environment'
 
                 sh '''
+                    docker rm -f task-api-staging || true
+
                     IMAGE_TAG=${BUILD_NUMBER} \
                     docker compose \
                       -p task-api-staging \
@@ -86,6 +90,7 @@ pipeline {
                             echo "Staging deployment is healthy!"
                             exit 0
                         fi
+
                         sleep 2
                     done
 
@@ -101,7 +106,11 @@ pipeline {
                 echo 'Releasing application to production'
 
                 sh '''
-                    docker tag task-api:${BUILD_NUMBER} task-api:release-${BUILD_NUMBER}
+                    docker rm -f task-api-prod || true
+
+                    docker tag \
+                      task-api:${BUILD_NUMBER} \
+                      task-api:release-${BUILD_NUMBER}
 
                     IMAGE_TAG=release-${BUILD_NUMBER} \
                     docker compose \
@@ -117,6 +126,7 @@ pipeline {
                             echo "Production release is healthy!"
                             exit 0
                         fi
+
                         sleep 2
                     done
 
