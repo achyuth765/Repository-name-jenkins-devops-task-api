@@ -47,3 +47,11 @@ describe('Task API', () => {
     });
 
 });
+
+describe('Additional coverage', () => {
+    test('Unknown route should return 404', async () => {
+        const response = await request(app).get('/unknown-route');
+
+        expect(response.statusCode).toBe(404);
+    });
+});
