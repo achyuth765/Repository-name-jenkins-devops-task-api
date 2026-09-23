@@ -35,6 +35,12 @@ pipeline {
                         sh "${scannerHome}/bin/sonar-scanner"
                     }
                 }
+
+                echo 'Waiting for SonarQube Quality Gate result'
+
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
@@ -138,8 +144,6 @@ pipeline {
                 sh '''
                     mkdir -p reports
 
-                    echo "Checking application metrics..."
-
                     curl -fsS \
                       http://localhost:3000/metrics \
                       > reports/prometheus-metrics.txt
@@ -148,14 +152,7 @@ pipeline {
                       "task_api_http_requests_total" \
                       reports/prometheus-metrics.txt
 
-                    echo "Application metrics endpoint is working!"
-
-                    echo "Checking Prometheus..."
-
                     curl -fsS http://localhost:9090/-/ready
-
-                    echo ""
-                    echo "Checking Prometheus target health..."
 
                     curl -fsS \
                       http://localhost:9090/api/v1/targets \
